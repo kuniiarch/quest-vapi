@@ -46,6 +46,8 @@ const resourceServer = new x402ResourceServer(facilitatorClient).register(
 );
 
 // x402 protection for the data routes. Unpaid calls get HTTP 402 + payment challenge.
+// NOTE: vAPI's "Check endpoint" probes with POST, not only GET — so both
+// GET and POST must be protected, otherwise POST falls through to Express 404.
 app.use(
   paymentMiddleware(
     {
@@ -53,11 +55,23 @@ app.use(
         accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
         description: "Crypto prices API info",
       },
+      "POST /api": {
+        accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
+        description: "Crypto prices API info",
+      },
       "GET /api/price": {
         accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
         description: "Live crypto prices (BTC, ETH, SOL and more) via CoinGecko",
       },
+      "POST /api/price": {
+        accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
+        description: "Live crypto prices (BTC, ETH, SOL and more) via CoinGecko",
+      },
       "GET /api/time": {
+        accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
+        description: "Server time (UTC + unix timestamp)",
+      },
+      "POST /api/time": {
         accepts: [{ scheme: "exact", price: PRICE, network: NETWORK, payTo: PAY_TO }],
         description: "Server time (UTC + unix timestamp)",
       },
@@ -132,6 +146,42 @@ app.get("/api/price", async (req, res) => {
 });
 
 app.get("/api/time", (req, res) => {
+  const now = new Date();
+  res.json({ utc: now.toISOString(), unix: Math.floor(now.getTime() / 1000) });
+});
+
+// POST handlers (same data as GET) — vAPI probes with POST, and a paid POST
+// must return data, not 404. Query params may also arrive in the JSON body.
+app.post("/api", (req, res) => {
+  res.json({
+    name: "crypto-prices",
+    description: "Simple crypto prices API (BTC, ETH, SOL and more) via CoinGecko. Pay-per-call with x402 ($0.01 USDC on Base).",
+    endpoints: ["/api/price?ids=bitcoin,ethereum&vs=usd", "/api/time"],
+    example: "/api/price?ids=bitcoin,ethereum&vs=usd",
+    openapi: "/api/openapi.json",
+    price: "$0.01 USDC per call",
+    network: "Base (eip155:8453)",
+  });
+});
+
+app.post("/api/price", async (req, res) => {
+  try {
+    const body = req.body || {};
+    const ids = req.query.ids || body.ids || "bitcoin,ethereum";
+    const vs = req.query.vs || body.vs || "usd";
+    const r = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(ids)}&vs_currencies=${encodeURIComponent(vs)}`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (!r.ok) throw new Error("CoinGecko HTTP " + r.status);
+    const data = await r.json();
+    res.json({ ids, vs_currencies: vs, prices: data });
+  } catch (e) {
+    res.status(500).json({ error: String((e && e.message) || e) });
+  }
+});
+
+app.post("/api/time", (req, res) => {
   const now = new Date();
   res.json({ utc: now.toISOString(), unix: Math.floor(now.getTime() / 1000) });
 });
