@@ -35,7 +35,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const PAY_TO = "0x4f94f74dc606a30547a3ceeda2fe4c8304c17fcf"; // owner wallet (connected in browser) — user can sign for it with MetaMask; agent wallet 0x52F7… cannot sign in a browser
+const PAY_TO = "0x52F7206fbb3773df713d669aceb1c83b56aa44e2"; // vAPI agent wallet (main) — payout wallet per user; user confirms it must be the agent wallet, NOT the owner wallet
 const NETWORK = "eip155:8453"; // Base mainnet
 const PRICE = "$0.01";
 
